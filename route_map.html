@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/><title>Router</title><link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/><script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script><style>html,body,#map{height:100%;margin:0}.panel{position:absolute;left:10px;top:10px;background:#fff;padding:12px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.18);font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;max-width:420px;z-index:9999;} .best{background:#eaf6ff;margin:6px 0;padding:8px;border-radius:8px;font-weight:600}.alt{background:#fff9e6;margin:6px 0;padding:8px;border-radius:8px;border:1px solid #f0e6c8}.small{font-size:13px;color:#444}.muted{color:#666;font-size:12px;margin-top:6px}.modes{display:flex;gap:8px;margin-top:8px}.mode{flex:1;padding:6px;border-radius:6px;background:#f5f7fb;text-align:center}.mode .num{font-weight:700;font-size:14px}.title{font-size:14px;margin-bottom:6px}</style></head><body><div id='map'></div>
+<div class='panel'><div class='title'><b>Best route (road-snapped)</b></div>
+<div class='best'>Distance: 0.804 km<br/>
+<div class='modes'><div class='mode' title='Car'><div>🚗</div><div class='num'>1 min</div><div class='small'>by car</div></div><div class='mode' title='Bike'><div>🚴</div><div class='num'>3 min</div><div class='small'>by bike</div></div><div class='mode' title='Walk'><div>🚶</div><div class='num'>10 min</div><div class='small'>on foot</div></div></div>
+<div style='margin-top:8px'>GEU ➜ GEHU</div></div>
+<div class='alt'><b>Alternative</b><br/>Distance: 0.809 km<br/>
+<div class='modes'><div class='mode'><div>🚗</div><div class='num'>1 min</div><div class='small'>by car</div></div><div class='mode'><div>🚴</div><div class='num'>3 min</div><div class='small'>by bike</div></div><div class='mode'><div>🚶</div><div class='num'>10 min</div><div class='small'>on foot</div></div></div>
+<div style='margin-top:8px'>GEU ➜ silver_jubliee ➜ GEHU</div></div>
+<div class='muted'>Note: times are approximate, using average speeds (car: 40 km/h, bike: 15 km/h, walk: 5 km/h).</div></div>
+<script>
+var map=L.map('map').setView([30.268468,77.993726],15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+var route0_nodes=[
+  {lat:30.268468, lon:77.993726},
+  {lat:30.273004, lon:78.000248}
+];
+var route0_names=["GEU","GEHU"];
+var route1_nodes=[
+  {lat:30.268468, lon:77.993726},
+  {lat:30.269289, lon:77.995546},
+  {lat:30.273004, lon:78.000248}
+];
+var route1_names=["GEU","silver_jubliee","GEHU"];
+var primaryColor='#0066FF';
+var altColor='#FF7A00';
+function drawStraight(nodes, color){var latlngs=nodes.map(n=>[n.lat,n.lon]);return L.polyline(latlngs,{weight:6,color:color,opacity:1.0}).addTo(map);} 
+async function osrmRoute(a,b){
+  var url=`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
+  const r=await fetch(url); if(!r.ok) throw new Error('OSRM error');
+  const j=await r.json(); if(!j.routes||!j.routes[0]) throw new Error('No routes');
+  return j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+}
+async function drawSnapped(nodes, color){
+  var all=[];
+  for(let i=0;i<nodes.length-1;i++){
+    try{
+      const seg=await osrmRoute(nodes[i], nodes[i+1]);
+      if(all.length && seg.length && (all[all.length-1][0]===seg[0][0] && all[all.length-1][1]===seg[0][1])) seg.shift();
+      all=all.concat(seg);
+    }catch(e){ all.push([nodes[i].lat,nodes[i].lon],[nodes[i+1].lat,nodes[i+1].lon]); }
+  }
+  return L.polyline(all,{weight:6,color:color,opacity:0.95}).addTo(map);
+}
+(async function(){
+  var layers=[];
+  var nodes0=route0_nodes;
+  for(let i=0;i<nodes0.length;i++){ L.marker([nodes0[i].lat,nodes0[i].lon]).addTo(map).bindPopup(route0_names[i]); }
+  try{ var pl0=await drawSnapped(nodes0, primaryColor); layers.push(pl0); }
+  catch(e){ var pl0=drawStraight(nodes0, primaryColor); layers.push(pl0); }
+  var nodes1=route1_nodes;
+  for(let i=0;i<nodes1.length;i++){ L.circleMarker([nodes1[i].lat,nodes1[i].lon],{radius:4,fillOpacity:1}).addTo(map).bindPopup(route1_names[i]); }
+  try{ var pl1=await drawSnapped(nodes1, altColor); pl1.setStyle({dashArray:'8,6'}); layers.push(pl1); }
+  catch(e){ var pl1=drawStraight(nodes1, altColor); pl1.setStyle({dashArray:'8,6'}); layers.push(pl1); }
+  var fg=L.featureGroup(layers);
+  if(layers.length) map.fitBounds(fg.getBounds(), {padding:[20,20]});
+})();
+</script></body></html>
